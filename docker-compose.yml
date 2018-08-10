@@ -1,0 +1,21 @@
+version: "3.2"
+services:
+  provider:
+    image: provider
+    build:
+      context: .
+      dockerfile: Dockerfile
+    deploy: 
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    container_name: connectors
+    networks:
+      - provider-net
+    volumes:
+      - type: bind
+        source: ./provider
+        target: /root/provider
+
+networks:
+  provider-net:
