@@ -1,6 +1,6 @@
 include_dirs=./include
 
-provider.exe: provider.cpp
-	g++ provider.cpp -lboost_system -lpthread -lssl -lcrypto\
+%: %.cpp
+	g++ $@.cpp -lboost_system -lpthread -lssl -lcrypto -lzmq\
 		-I$(include_dirs)\
-		-o provider.exe
+		-o $@

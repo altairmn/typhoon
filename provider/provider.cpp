@@ -2,6 +2,8 @@
 #include <websocketpp/client.hpp>
 #include <string>
 #include <json.hpp>
+#include <cstring>
+#include "zhelpers.hpp"
 
 #include <iostream>
 
@@ -13,10 +15,29 @@ using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 using json = nlohmann::json;
 
+class Pusher {
+public:
+  zmq::context_t context;
+  zmq::socket_t sender;
+
+  Pusher() : context(1), sender(context, ZMQ_PUSH) {
+    sender.connect("tcp://localhost:5558");
+  }
+
+  void send(std::string _msg) {
+    int len = _msg.length();
+    zmq::message_t msg (len);
+    memcpy(msg.data(), _msg.c_str(), len);
+    sender.send(msg);
+  }
+
+} pusher;
+
+
 void on_message(websocketpp::connection_hdl, client::message_ptr msg) {
   // send the message using zmq here
     json j3 = json::parse(msg->get_payload());
-    std::cout << j3 << std::endl;
+    pusher.send(j3.dump());
 }
 
 /// Verify that one of the subject alternative names matches the given hostname
