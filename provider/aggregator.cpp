@@ -19,7 +19,7 @@ int main (int argc, char *argv[])
     //  Prepare our context and socket
     zmq::context_t context(1);
     zmq::socket_t receiver(context, ZMQ_PULL);
-    receiver.connect("tcp://localhost:5558");
+    receiver.bind("tcp://*:5558");
 
     zmq::message_t message;
     // receiver.recv(&message);
@@ -38,56 +38,28 @@ int main (int argc, char *argv[])
     long long int next_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     next_ts = next_ts - next_ts % interval + interval;
     
+    auto get_price = [](std::string _pr) -> float { return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1)); };
     long long int this_ts;
-    float prices[10000];
-    int idx = 0;
+    std::map <long long int, std::vector<float> > prices;
 
     // always running
     while(true) {
       // assume binance
         receiver.recv(&message);
         std::string smessage(static_cast<char*>(message.data()), message.size());
-        // convert to json string
+        // convert to json strint
         json jmsg = json::parse(smessage);
         this_ts = jmsg["T"];
-        // get timestamp
-        if (next_ts >= this_ts) {
-          // aggregate and send
-          idx = 0;
+      
+        if (next_ts < this_ts) {
+          long long int get_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+          printf("Delay: %lld\n", get_ts - this_ts);
+          next_ts += interval;
         }
+        prices[next_ts].push_back(1);
     }
 
     //  Start our clock now
-    struct timeval tstart;
-    gettimeofday (&tstart, NULL);
-
-    //  Process 100 confirmations
-    int task_nbr;
-    int total_msec = 0;     //  Total calculated cost in msecs
-    for (task_nbr = 0; task_nbr < 100; task_nbr++) {
-
-        receiver.recv(&message);
-        std::string smessage(static_cast<char*>(message.data()), message.size());
-        std::cout << smessage << std::endl;
-        if ((task_nbr / 10) * 10 == task_nbr)
-            std::cout << ":" << std::flush;
-        else
-            std::cout << "." << std::flush;
-    }
-    //  Calculate and report duration of batch
-    struct timeval tend, tdiff;
-    gettimeofday (&tend, NULL);
-
-    if (tend.tv_usec < tstart.tv_usec) {
-        tdiff.tv_sec = tend.tv_sec - tstart.tv_sec - 1;
-        tdiff.tv_usec = 1000000 + tend.tv_usec - tstart.tv_usec;
-    }
-    else {
-        tdiff.tv_sec = tend.tv_sec - tstart.tv_sec;
-        tdiff.tv_usec = tend.tv_usec - tstart.tv_usec;
-    }
-    total_msec = tdiff.tv_sec * 1000 + tdiff.tv_usec / 1000;
-    std::cout << "\nTotal elapsed time: " << total_msec << " msec\n" << std::endl;
     return 0;
 }
 
