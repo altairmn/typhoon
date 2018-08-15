@@ -33,3 +33,6 @@ of the function which is executed everytime the function is called.
     }
 
 
+### `condition_variable` Usage Pattern
+
+
