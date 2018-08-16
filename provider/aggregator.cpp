@@ -104,7 +104,13 @@ int main (int argc, char *argv[])
         std::string smessage(static_cast<char*>(message.data()), message.size());
         // convert to json string
         json jmsg = json::parse(smessage);
+#if defined BINANCE
+        std::cout << "defined binance" << std::endl;
         cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
+#elif defined BITMEX
+        std::cout << "defined BITMEX" << std::endl; 
+#endif
+        std::cout << jmsg.dump() << std::endl;
     }
 
     // consumer.join();
