@@ -5,15 +5,17 @@
 #include <cstdlib>
 #include <json.hpp>
 #include <utility>
+#include <thread>
+#include <mutex>
 
 using json = nlohmann::json;
 
 template<typename T>
 class CircularQueue {
-  int size, start, end;
-  std::mutex m;
-  std::vector<T> queue;
   public:
+    int size, start, end;
+    std::mutex m;
+    std::vector<T> queue;
     CircularQueue (int _size): size{_size}, start(0), end(0) {
       queue.reserve(size);
     }
@@ -22,30 +24,10 @@ class CircularQueue {
       // collect everything from the start to the end
       int till = end;
       // return closing price
-      start = till;
-      return queue[till];
+      start = end;
+      return queue[std::max(till - 1, 0)];
     }
 };
-
-void send_every(void* context,
-    std::chrono::sytem_clock::time_point nextStartTime,
-    std::chrono::milliseconds interval,
-    CircularQueue& cque) {
-  zmq::socket_t sender(*(zmq::context_t*)context, ZMQ_PUSH);
-  zmq::message_t message;
-  while(true) {
-    std::pair <long long int, float> closing = cque.exec();
-    nextStartTime += interval; 
-    std::this_thread::sleep_until(nextStartTime);
-  }
-}
-
-/* have another sender connection
- * that sends the result of stat
- * every x seconds. the x second
- * wakeup is initiated by a thread
- * which wakes up every x seconds
- */
 
 template<typename T>
 void CircularQueue<T>::push(T elem) {
@@ -53,6 +35,34 @@ void CircularQueue<T>::push(T elem) {
     queue.push_back(elem);
     end = (end + 1) % size;
   }
+}
+
+void send_every(void* context,
+    std::chrono::system_clock::time_point nextStartTime,
+    std::chrono::milliseconds interval,
+    CircularQueue< std::pair<long long int, float> >& cque) 
+{
+  zmq::socket_t sender(*(zmq::context_t*)context, ZMQ_PUSH);
+  zmq::message_t message;
+  while(true) {
+    std::pair <long long int, float> closing = cque.exec();
+    // TODO: send here
+    
+    nextStartTime += interval; 
+    std::this_thread::sleep_until(nextStartTime);
+  }
+}
+
+inline std::chrono::system_clock::time_point get_closest_tp(int interval) {
+    // Get current time with precision of milliseconds
+    auto now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
+    // sys_milliseconds is type time_point<system_clock, milliseconds>
+    using sys_milliseconds = decltype(now);
+    // Convert time_point to signed integral type
+    auto integral_duration = now.time_since_epoch().count();
+    integral_duration = integral_duration - integral_duration%interval + interval;
+    sys_milliseconds dt{std::chrono::milliseconds{integral_duration}};
+    return dt;
 }
 
 int main (int argc, char *argv[])
@@ -76,10 +86,16 @@ int main (int argc, char *argv[])
 
     CircularQueue < std::pair<long long int, float> > cque(1000);
 
+
+    std::thread consumer(
+        send_every,
+        static_cast<void*>(context.get()),
+        get_closest_tp(interval),
+        std::chrono::milliseconds{interval},
+        std::ref(cque)
+        );
+
     // get next time stamp
-    long long int next_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    next_ts = next_ts - next_ts % interval + interval;
-    long long int this_ts;
     
     auto get_price = [](std::string _pr) -> float { return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1)); };
 
@@ -89,13 +105,9 @@ int main (int argc, char *argv[])
         // convert to json string
         json jmsg = json::parse(smessage);
         cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
-      
-        // if (next_ts < this_ts) {
-        //   long long int get_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        //   printf("Delay: %lld\n", get_ts - this_ts);
-        //   next_ts += interval;
-        // }
     }
+
+    // consumer.join();
 
     //  Start our clock now
     return 0;

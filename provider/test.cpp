@@ -2,7 +2,11 @@
 #include <iostream>
 #include <mutex>
 #include <chrono>
+#include <condition_variable>
+#include <json.hpp>
+#include <zmq.hpp>
 
+using json = nlohmann::json;
 // have a circular queue with a pointer.
 // when the circular queue is full, no more is put into it
 // and then a condition variable is used
@@ -24,18 +28,20 @@
  * and not periodic
  */
 
-class CircularTaskQueue() {
+class CircularTaskQueue {
 private:
-    int size, start, end, till;
+    int size, start, end, till, interval;
     std::condition_variable cv;
     std::mutex lock;
+    long long int next_ts, till_ts;
     float* queue;
     zmq::context_t context;
-    zmq::socket_t sender;
+    zmq::socket_t receiver;
     zmq::message_t message;
+    bool aggregate;
 public:
-  CircularTaskQueue(int _size): 
-    size(_size), start(0), end(0),
+  CircularTaskQueue(int _size, int _interval): 
+    size(_size), start(0), end(0), interval(_interval),
     context(1), receiver(context, ZMQ_PULL)
   {
     queue = new float[size]; 
@@ -45,52 +51,49 @@ public:
   ~CircularTaskQueue() {
     delete[] queue;
   }
-  void push(float elem) {
-
+  void push() {
     while(true) {
-      receiver.recv(&message);
+      /* receive messages here */
       receiver.recv(&message);
       std::string smessage(static_cast<char*>(message.data()), message.size());
+
       json jmsg = json::parse(smessage);
-      this_ts = jmsg["T"];
+      std::cout << jmsg.dump() << std::endl;
+
+      long long int this_ts = jmsg["T"];
+
+      // queue[end] = jmsg["p"];
+      end = (end + 1) % size;
+
       if (next_ts < this_ts) {
-        long long int get_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        printf("Delay: %lld\n", get_ts - this_ts);
+        std::unique_lock<std::mutex> l(lock);
+        aggregate = true;
+        till = end;
+        till_ts = this_ts;
         next_ts += interval;
+        cv.notify_one();
       }
-      prices[next_ts].push_back(1);
     }
-    // this thread intends to modify the variable
-    std::unique_lock<std::mutex> l(lock);
-    aggregate = true;
-    // check if full
-    // when the other thread is consuming, then can't write to this.
-    // other thread knows of the range in which these elements exist
-    // check if the thread is full
-    // otherwise, reexecute the whole thing
-    
-    // rockstar
-    ev.notify_one();
-    queue[end++] = elem;
   }
 
   void exec() {
-    // acquire the lock
     std::unique_lock<std::mutex> l(lock);
-    cv.wait(l, [] { return aggregate }); // wait until aggregate == True
+    cv.wait(l, [=] { return aggregate; } ); // wait until aggregate == True
 
     float sum = 0; 
-    while (start < till) {
-      sum += prices[start];
-      start++;
+    while (start != till) {
+      sum += queue[start];
+      start = (start + 1) % size;
     }
-
+    long long int get_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    printf("[%f] at %lld delay", sum, till_ts - get_ts);
     aggregate = false;
-    l.unlock();
   }
 };
 
 int main(int argc, char* argv[]) {
+  CircularTaskQueue * cqueue = new CircularTaskQueue(1000, 2000);
+  cqueue->push();
 
   return 0;
 }
