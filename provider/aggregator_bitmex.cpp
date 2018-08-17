@@ -7,7 +7,6 @@
 #include <utility>
 #include <thread>
 #include <mutex>
-#include <fmt/core.h>
 
 using json = nlohmann::json;
 
@@ -71,24 +70,19 @@ int main (int argc, char *argv[])
     //  Prepare our context and socket
     std::shared_ptr<zmq::context_t> context = std::make_shared<zmq::context_t>(1);
     zmq::socket_t receiver(*context.get(), ZMQ_PULL);
-    int interval, port;
+    receiver.bind("tcp://*:5558");
 
-    if (argc != 3) {
-      std::cout << "Usage: "
-                << argv[0]
-                << " agg_interval (in ms)"
-                << " port"
-                << std::endl;
-      return -1;
-    } else {
-      interval = atoi(argv[1]);
-      port = atoi(argv[2]);
-    }
-    std::string bind_addr = "tcp://*:" + std::to_string(port);
-    receiver.bind(bind_addr.c_str());
     zmq::message_t message;
     // receiver.recv(&message);
 
+    int interval;
+
+    if (argc != 2) {
+      std::cout << "Usage: " << argv[0] << " agg_interval (in ms)" << std::endl;
+      return -1;
+    } else {
+      interval = atoi(argv[1]);
+    }
 
     CircularQueue < std::pair<long long int, float> > cque(1000);
 
@@ -103,28 +97,17 @@ int main (int argc, char *argv[])
 
     // get next time stamp
     
-#if defined BINANCE
     auto get_price = [](std::string _pr) -> float { return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1)); };
-#endif
-#if defined BITMEX
-    auto get_ts = []
-#endif
 
     while(true) {
         receiver.recv(&message);
         std::string smessage(static_cast<char*>(message.data()), message.size());
         // convert to json string
         json jmsg = json::parse(smessage);
-#if defined BINANCE
-        // cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
-        std::cout << jmsg.dump() << std::endl;
-#elif defined BITMEX
         for (auto k : jmsg["data"]) {
-          std::cout << "timestamp: " << k["timestamp"]
-                    << " price" << k["price"]
-                    << std::endl;
+          std::cout << k << std::endl;
+          // cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
         }
-#endif
     }
 
     // consumer.join();
