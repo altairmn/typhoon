@@ -17,17 +17,17 @@ all: $(targets)
 clean:
 	rm -rf $(targets)
 
-run: 
-	rm -rf trading.pid && \
-	./bitmex_provider www.bitmex.com 443 "/realtime?subscribe=trade:XBTUSD" & echo $$! >> trading.pid &&\
-	./binance_provider stream.binance.com 9443 "/ws/btcusdt@trade" & echo $$! >> trading.pid &&\
-	./bitmex_agg $(latency) $(bitmex_port) & echo $$! >> trading.pid &&\
-	./binance_agg $(latency) $(binance_port) & echo $$! >> trading.pid &&\
-	./aligner & echo $$! >> trading.pid\
-
+# run: 
+# 	rm -rf trading.pid && \
+# 	./bitmex_provider www.bitmex.com 443 "/realtime?subscribe=trade:XBTUSD" & &&\
+# 	./binance_provider stream.binance.com 9443 "/ws/btcusdt@trade" & &&\
+# 	./bitmex_agg $(latency) $(bitmex_port) & &&\
+# 	./binance_agg $(latency) $(binance_port) & &&\
+# 	./aligner &
+# 
 
 stop:
-	cat trading.pid | while read in; do kill -9 $$in; done
+	killall $(targets)
 
 bitmex_provider: provider.cpp
 	g++ -DPORT=$(bitmex_port)\

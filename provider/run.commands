@@ -1,0 +1,5 @@
+./bitmex_provider www.bitmex.com 443 "/realtime?subscribe=trade:XBTUSD"
+./binance_provider stream.binance.com 9443 "/ws/btcusdt@trade"
+./bitmex_agg 1000 5557 
+./binance_agg 1000 5558
+
