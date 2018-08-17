@@ -47,7 +47,11 @@ void send_every(void* context,
     CircularQueue< std::pair<long long int, float> >& cque) 
 {
   zmq::socket_t sender(*(zmq::context_t*)context, ZMQ_PUSH);
-  sender.connect("tcp://localhost:5559");
+#if defined ALIGN_PORT
+  std::string bind_addr = "tcp://localhost:"
+    + std::to_string(ALIGN_PORT);
+  sender.connect(bind_addr.c_str());
+#endif
   while(true) {
 
     std::pair <long long int, float> closing = cque.exec();
@@ -60,7 +64,6 @@ void send_every(void* context,
 #elif defined BITMEX
     j["id"] = 2;
 #endif
-    j["tr"] = closing.first;
     std::string _msg = j.dump();
     int len = _msg.length();
     zmq::message_t msg (len);
@@ -86,7 +89,7 @@ inline std::chrono::system_clock::time_point get_closest_tp(int interval) {
 
 #if defined BINANCE
 inline float get_price (std::string _pr) {
-  return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1));
+  return std::stof(_pr);
 }
 #endif
 #if defined BITMEX

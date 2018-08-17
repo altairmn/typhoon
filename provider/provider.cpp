@@ -26,7 +26,6 @@ public:
       + std::to_string(PORT);
 #endif
     sender.connect(bind_addr.c_str());
-    std::cout << bind_addr << std::endl;
   }
 
   void send(std::string _msg) {
