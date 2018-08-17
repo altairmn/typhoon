@@ -7,7 +7,10 @@
 #include <utility>
 #include <thread>
 #include <mutex>
-#include <fmt/core.h>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/posix_time/posix_time_io.hpp>
+#include <boost/date_time.hpp>
+#include <sstream>
 
 using json = nlohmann::json;
 
@@ -23,10 +26,10 @@ class CircularQueue {
     void push(T);
     T exec() { 
       // collect everything from the start to the end
-      int till = end;
       // return closing price
+      T retval = queue[std::max(end-1, 0)];
       start = end;
-      return queue[std::max(till - 1, 0)];
+      return retval;
     }
 };
 
@@ -44,11 +47,26 @@ void send_every(void* context,
     CircularQueue< std::pair<long long int, float> >& cque) 
 {
   zmq::socket_t sender(*(zmq::context_t*)context, ZMQ_PUSH);
-  zmq::message_t message;
+  sender.connect("tcp://localhost:5559");
   while(true) {
+
     std::pair <long long int, float> closing = cque.exec();
     // TODO: send here
-    
+    json j;
+    j["T"] = std::chrono::duration_cast<std::chrono::milliseconds>(nextStartTime.time_since_epoch()).count();
+    j["p"] = closing.second;
+#if defined BINANCE
+    j["id"] = 1;
+#elif defined BITMEX
+    j["id"] = 2;
+#endif
+    j["tr"] = closing.first;
+    std::string _msg = j.dump();
+    int len = _msg.length();
+    zmq::message_t msg (len);
+    memcpy(msg.data(), _msg.c_str(), len);
+    sender.send(msg);
+
     nextStartTime += interval; 
     std::this_thread::sleep_until(nextStartTime);
   }
@@ -66,6 +84,25 @@ inline std::chrono::system_clock::time_point get_closest_tp(int interval) {
     return dt;
 }
 
+#if defined BINANCE
+inline float get_price (std::string _pr) {
+  return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1));
+}
+#endif
+#if defined BITMEX
+long long int get_ts(std::string dt) {
+    boost::posix_time::ptime pt;
+      { 
+          std::istringstream iss(dt);
+          auto* f = new boost::posix_time::time_input_facet("%Y-%m-%dT%H:%M:%S%fZ");
+
+          std::locale loc(std::locale(""), f);
+          iss.imbue(loc);
+          iss >> pt;
+      }
+    return (pt - boost::posix_time::ptime{{1970,1,1},{}}).total_milliseconds();
+}
+#endif
 int main (int argc, char *argv[])
 {
     //  Prepare our context and socket
@@ -103,12 +140,6 @@ int main (int argc, char *argv[])
 
     // get next time stamp
     
-#if defined BINANCE
-    auto get_price = [](std::string _pr) -> float { return std::stof(std::string(_pr.begin() + 1, _pr.end() - 1)); };
-#endif
-#if defined BITMEX
-    auto get_ts = []
-#endif
 
     while(true) {
         receiver.recv(&message);
@@ -116,20 +147,13 @@ int main (int argc, char *argv[])
         // convert to json string
         json jmsg = json::parse(smessage);
 #if defined BINANCE
-        // cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
-        std::cout << jmsg.dump() << std::endl;
+        cque.push(std::make_pair(jmsg["T"], get_price(jmsg["p"])));
 #elif defined BITMEX
         for (auto k : jmsg["data"]) {
-          std::cout << "timestamp: " << k["timestamp"]
-                    << " price" << k["price"]
-                    << std::endl;
+          cque.push(std::make_pair(get_ts(k["timestamp"]), k["price"]));
         }
 #endif
     }
-
-    // consumer.join();
-
-    //  Start our clock now
     return 0;
 }
 
