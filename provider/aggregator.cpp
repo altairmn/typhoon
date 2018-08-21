@@ -64,6 +64,9 @@ void send_every(void* context,
 #elif defined BITMEX
     j["id"] = 2;
 #endif
+#if defined DEBUG
+    j["t"] = closing.first;
+#endif
     std::string _msg = j.dump();
     int len = _msg.length();
     zmq::message_t msg (len);

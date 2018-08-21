@@ -3,6 +3,7 @@ include_dirs=./include
 bitmex_port=5557
 binance_port=5558
 align_port=5559
+strategy_port=5560
 targets=bitmex_provider binance_provider bitmex_agg binance_agg aligner
 latency=1000
 
@@ -17,14 +18,13 @@ all: $(targets)
 clean:
 	rm -rf $(targets)
 
-# run: 
-# 	rm -rf trading.pid && \
-# 	./bitmex_provider www.bitmex.com 443 "/realtime?subscribe=trade:XBTUSD" & &&\
-# 	./binance_provider stream.binance.com 9443 "/ws/btcusdt@trade" & &&\
-# 	./bitmex_agg $(latency) $(bitmex_port) & &&\
-# 	./binance_agg $(latency) $(binance_port) & &&\
-# 	./aligner &
-# 
+run: 
+	./bitmex_provider www.bitmex.com 443 "/realtime?subscribe=trade:XBTUSD" & &&\
+	./binance_provider stream.binance.com 9443 "/ws/btcusdt@trade" & &&\
+	./bitmex_agg $(latency) $(bitmex_port) & &&\
+	./binance_agg $(latency) $(binance_port) & &&\
+	./aligner &
+ 
 
 stop:
 	killall $(targets)
@@ -44,21 +44,21 @@ binance_provider: provider.cpp
 		-o binance_provider
 
 bitmex_agg: aggregator.cpp
-	g++ -DBITMEX -DALIGN_PORT=$(align_port)\
+	g++ -DBITMEX -DALIGN_PORT=$(align_port) -DDEBUG\
 		aggregator.cpp -lboost_system -lpthread -lssl\
 		-lcrypto -lzmq\
 		-I$(include_dirs)\
 		-o bitmex_agg
 
 binance_agg: aggregator.cpp
-	g++ -DBINANCE -DALIGN_PORT=$(align_port)\
+	g++ -DBINANCE -DALIGN_PORT=$(align_port) -DDEBUG\
 		aggregator.cpp -lboost_system -lpthread -lssl\
 		-lcrypto -lzmq\
 		-I$(include_dirs)\
 		-o binance_agg
 
 aligner: aligner.cpp
-	g++ -DALIGN_PORT=$(align_port)\
+	g++ -DALIGN_PORT=$(align_port) -DSTRATEGY_PORT=$(strategy_port) -DDEBUG\
 		aligner.cpp -lboost_system -lpthread -lssl\
 		-lcrypto -lzmq\
 		-I$(include_dirs)\
